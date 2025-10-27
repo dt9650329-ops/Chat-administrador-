@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Panel Repartidor / Administrador</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f8f9fa; /* Color de fondo más claro */
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    h2 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 0;
+    }
+
+    #container {
+        display: flex;
+        width: 90%;
+        max-width: 1000px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+    }
+
+    #usuarios-panel {
+        width: 30%;
+        padding: 15px;
+        border-right: 1px solid #eee;
+        background: #f4f6f9;
+        overflow-y: auto;
+        max-height: 500px;
+    }
+
+    #chat-panel {
+        width: 70%;
+        display: flex;
+        flex-direction: column;
+        padding: 15px;
+    }
+
+    #usuarios {
+      margin-bottom: 0;
+    }
+
+    .chat-btn {
+      display: block;
+      width: 100%;
+      margin: 5px 0;
+      padding: 12px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.3s, transform 0.1s;
+      font-weight: bold;
+    }
+
+    .chat-btn:hover {
+      background: #0056b3;
+      transform: translateY(-1px);
+    }
+    
+    .chat-btn:focus {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.4);
+    }
+
+    .nuevo-msg {
+      background: #dc3545 !important; /* Rojo para alerta */
+      animation: parpadeo 1s infinite;
+    }
+
+    .nuevo-msg:hover {
+      background: #c82333 !important;
+    }
+
+    @keyframes parpadeo {
+      0% { background-color: #dc3545; }
+      50% { background-color: #e57373; }
+      100% { background-color: #dc3545; }
+    }
+
+    #chat {
+      flex-grow: 1;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      height: 350px; /* Mayor altura para el área de chat */
+      overflow-y: auto;
+      padding: 15px;
+      background: #fcfcfc;
+      margin-bottom: 15px;
+    }
+    
+    .msg-repartidor {
+        text-align: right;
+        margin-bottom: 8px;
+    }
+    .msg-cliente {
+        text-align: left;
+        margin-bottom: 8px;
+    }
+    .msg-repartidor span {
+        background: #007bff;
+        color: white;
+        padding: 8px 12px;
+        border-radius: 15px 15px 0 15px;
+        display: inline-block;
+        max-width: 80%;
+    }
+    .msg-cliente span {
+        background: #e9ecef;
+        color: #333;
+        padding: 8px 12px;
+        border-radius: 15px 15px 15px 0;
+        display: inline-block;
+        max-width: 80%;
+    }
+
+
+    #inputMsg {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ced4da;
+      border-radius: 8px;
+      box-sizing: border-box;
+      transition: border-color 0.3s;
+    }
+    
+    #inputMsg:focus {
+        border-color: #007bff;
+        outline: none;
+    }
+  </style>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getDatabase, ref, onChildAdded, push, query, limitToLast } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+    // 🔑 CONFIGURACIÓN REAL DE TU PROYECTO (DOMICILIOS-1CD74) 🔑
+    // Valores obtenidos de tu archivo de configuración
+    const firebaseConfig = {
+      apiKey: "AIzaSyAZX7Q5B29Xti4YtV9wXuiREVdkgcclv9U",
+      authDomain: "domicilios-1cd74.firebaseapp.com",
+      databaseURL: "https://domicilios-1cd74.firebaseio.com",
+      projectId: "domicilios-1cd74",
+      storageBucket: "domicilios-1cd74.appspot.com",
+      // Los siguientes son placeholders, pero no son críticos para Realtime Database
+      messagingSenderId: "771819437001", 
+      appId: "1:771819437001:web:xxxxxxxxxxxxxx" 
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const lista = document.getElementById("usuarios");
+    const chatBox = document.getElementById("chat");
+    const input = document.getElementById("inputMsg");
+    let usuarioActual = null;
+    const botones = {};
+    const chatListeners = {}; // Para manejar los listeners de chat
+
+    // 🔹 Detectar nuevos clientes con mensajes
+    onChildAdded(ref(db, "chats"), snapshot => {
+      const user = snapshot.key;
+      if (!botones[user]) {
+        const boton = document.createElement("button");
+        boton.textContent = user;
+        boton.className = "chat-btn";
+        boton.onclick = () => abrirChat(user, boton);
+        lista.appendChild(boton);
+        botones[user] = boton;
+
+        // 🔹 Escucha si llegan mensajes nuevos del cliente (solo para notificar)
+        // Usamos limitToLast(1) para solo escuchar el último mensaje
+        const lastMessageQuery = query(ref(db, `chats/${user}`), limitToLast(1));
+        
+        // Guardamos el listener para poder detenerlo si es necesario
+        chatListeners[user] = onChildAdded(lastMessageQuery, snap => {
+          const data = snap.val();
+          // Solo si el remitente no es el "repartidor" (administrador) y el chat no está abierto
+          if (data.remitente !== "repartidor" && usuarioActual !== user) {
+            boton.classList.add("nuevo-msg"); // botón parpadea si hay mensaje nuevo
+          }
+        });
+      }
+    });
+
+    // 🔹 Abrir el chat con un cliente
+    function abrirChat(user, boton) {
+      // 1. Limpieza y preparación de la UI
+      usuarioActual = user;
+      chatBox.innerHTML = "";
+      
+      // Quitar la notificación visual del botón que se abre
+      Object.values(botones).forEach(btn => btn.classList.remove("nuevo-msg"));
+      boton.classList.remove("nuevo-msg");
+      
+      // 2. Cargar y escuchar el historial completo
+      onChildAdded(ref(db, `chats/${user}`), s => {
+        const data = s.val();
+        
+        const div = document.createElement("div");
+        const span = document.createElement("span");
+        
+        span.textContent = data.texto;
+        
+        if (data.remitente === "repartidor") {
+            div.className = "msg-repartidor";
+        } else {
+            // Muestra el nombre del cliente en el mensaje
+            div.className = "msg-cliente";
+            span.textContent = `${data.remitente}: ${data.texto}`;
+        }
+        
+        div.appendChild(span);
+        chatBox.appendChild(div);
+        
+        // Desplazar hacia el último mensaje
+        chatBox.scrollTop = chatBox.scrollHeight;
+      });
+    }
+
+    // 🔹 Enviar mensaje del repartidor
+    input.addEventListener("keypress", e => {
+      if (e.key === "Enter" && usuarioActual && e.target.value.trim() !== "") {
+        push(ref(db, `chats/${usuarioActual}`), {
+          remitente: "repartidor",
+          texto: e.target.value.trim(),
+          timestamp: Date.now()
+        });
+        e.target.value = ""; // Limpiar input
+      }
+    });
+  </script>
+</head>
+
+<body>
+  <h2>Panel de Repartidor / Administrador 💬</h2>
+  
+  <div id="container">
+    <div id="usuarios-panel">
+        <h3>Chats Activos</h3>
+        <div id="usuarios">
+            </div>
+    </div>
+    
+    <div id="chat-panel">
+        <h3>Ventana de Chat</h3>
+        <div id="chat">
+            Seleccione un cliente para empezar a chatear.
+        </div>
+        <input id="inputMsg" placeholder="Escriba su mensaje y presione Enter...">
+    </div>
+  </div>
+</body>
+</html>
