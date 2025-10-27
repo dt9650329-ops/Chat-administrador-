@@ -1,0 +1,14 @@
+{
+  "appId": "com.domicilios.panel",
+  "appName": "PanelAdminChat",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "server": {
+    "allowNavigation": []
+  },
+  "plugins": {
+    "Geolocation": {
+      "androidPermissionDescription": "Se necesita el acceso a la ubicación para ver la posición del repartidor en tiempo real."
+    }
+  }
+}
